@@ -27,6 +27,7 @@ button {
   cursor:pointer;
 }
 button.selected { background:#fff; color:#000; }
+button:disabled { opacity:0.6; }
 
 .grid {
   display:grid;
@@ -40,11 +41,14 @@ button.selected { background:#fff; color:#000; }
   background:#111;
   border:1px dashed #444;
   position:relative;
-  display:flex; align-items:center; justify-content:center;
+  display:flex;
+  align-items:center;
+  justify-content:center;
   text-align:center;
   cursor:pointer;
   white-space:pre-line;
   font-size:22px;
+  user-select:none;
 }
 .pad.loaded { background:#181818; border-style:solid; }
 .pad.playing { background:#00ff66; color:#000; }
@@ -53,13 +57,14 @@ button.selected { background:#fff; color:#000; }
   position:absolute;
   top:6px; left:6px;
   font-size:16px;
-  opacity:0.8;
+  opacity:0.85;
 }
 
 .controls {
   display:flex;
   gap:12px;
   align-items:center;
+  flex-wrap:wrap;
 }
 
 input {
@@ -70,6 +75,12 @@ input {
   padding:4px 8px;
   width:100px;
   text-align:center;
+}
+label {
+  display:flex;
+  gap:6px;
+  align-items:center;
+  font-size:18px;
 }
 </style>
 </head>
@@ -83,9 +94,15 @@ input {
 
 <div class="controls">
   <button id="playSequence">Play All</button>
+
   <label>
     Cutoff (ms)
     <input id="cutoffInput" type="number" value="0" min="0">
+  </label>
+
+  <label>
+    Gap (ms)
+    <input id="gapInput" type="number" value="50" min="0">
   </label>
 </div>
 
@@ -94,9 +111,9 @@ const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 const grid = document.getElementById("grid");
 const playBtn = document.getElementById("playSequence");
 const cutoffInput = document.getElementById("cutoffInput");
+const gapInput = document.getElementById("gapInput");
 const genreButtonsDiv = document.getElementById("genreButtons");
 
-const GAP = 0.05; // 50ms gap
 const rates = [1,2,3,4];
 const pads = [];
 
@@ -117,18 +134,46 @@ const layouts = {
 function createPad(i){
   const el=document.createElement("div");
   el.className="pad";
+
   const rateEl=document.createElement("div");
   rateEl.className="rate";
   el.appendChild(rateEl);
+
+  const labelEl=document.createElement("div");
+  el.appendChild(labelEl);
+
   grid.appendChild(el);
 
-  pads[i]={ buffer:null, duration:0, rate:1, el, rateEl, name:"" };
+  const fileInput=document.createElement("input");
+  fileInput.type="file";
+  fileInput.accept="audio/*";
+  fileInput.style.display="none";
+  fileInput.onchange=e=>{
+    if(e.target.files[0]) loadSample(e.target.files[0],i);
+  };
+  el.appendChild(fileInput);
 
-  el.onclick=()=>playPad(i);
+  pads[i]={ buffer:null, rate:1, el, rateEl, labelEl, name:"" };
+
+  let holdTimer=null;
+
+  el.onmousedown=()=>{
+    holdTimer=setTimeout(()=>fileInput.click(),500);
+  };
+  el.onmouseup=()=>{
+    if(holdTimer){
+      clearTimeout(holdTimer);
+      playPad(i);
+    }
+    holdTimer=null;
+  };
+  el.onmouseleave=()=>holdTimer && clearTimeout(holdTimer);
+
   el.oncontextmenu=e=>{
     e.preventDefault();
     cycleRate(i);
   };
+
   el.ondragover=e=>e.preventDefault();
   el.ondrop=e=>{
     e.preventDefault();
@@ -148,8 +193,8 @@ function setLayout(g){
   document.querySelectorAll(".buttons button").forEach(b=>b.classList.remove("selected"));
   [...genreButtonsDiv.children].find(b=>b.textContent===g.toUpperCase()).classList.add("selected");
 
-  layouts[g].forEach((n,i)=>{
-    pads[i].name=n;
+  layouts[g].forEach((name,i)=>{
+    pads[i].name=name;
     updatePadLabel(i);
   });
 }
@@ -158,9 +203,12 @@ function setLayout(g){
 function updatePadLabel(i){
   const p=pads[i];
   p.rateEl.textContent=p.rate+"x";
-  p.el.lastChild?.remove;
-  p.el.childNodes[1]?.remove;
-  p.el.append(`${p.name}${p.buffer ? "\n"+p.duration.toFixed(2)+"s" : ""}`);
+
+  let text=p.name;
+  if(p.buffer){
+    text+=`\n${getPadDuration(p).toFixed(2)}s`;
+  }
+  p.labelEl.textContent=text;
 }
 
 // ---- LOAD SAMPLE ----
@@ -169,18 +217,25 @@ async function loadSample(file,i){
   const buffer=await audioCtx.decodeAudioData(data);
   const p=pads[i];
   p.buffer=buffer;
-  p.duration=buffer.duration;
   p.el.classList.add("loaded");
   updatePadLabel(i);
   updateSequenceDuration();
 }
 
-// ---- RATE CYCLE ----
+// ---- RATE ----
 function cycleRate(i){
   const p=pads[i];
   p.rate=rates[(rates.indexOf(p.rate)+1)%rates.length];
   updatePadLabel(i);
   updateSequenceDuration();
+}
+
+// ---- DURATION ----
+function getPadDuration(p){
+  if(!p.buffer) return 0;
+  const cutoff=parseFloat(cutoffInput.value);
+  const raw=p.buffer.duration / p.rate;
+  return cutoff>0 ? Math.min(cutoff/1000, raw) : raw;
 }
 
 // ---- PLAY PAD ----
@@ -191,12 +246,8 @@ function playPad(i){
   src.buffer=p.buffer;
   src.playbackRate.value=p.rate;
   src.connect(audioCtx.destination);
-
-  const cutoff=parseFloat(cutoffInput.value);
-  const dur=cutoff>0 ? Math.min(cutoff/1000, p.buffer.duration/p.rate) : p.buffer.duration/p.rate;
-
   src.start();
-  src.stop(audioCtx.currentTime+dur);
+  src.stop(audioCtx.currentTime+getPadDuration(p));
 
   p.el.classList.add("playing");
   setTimeout(()=>p.el.classList.remove("playing"),100);
@@ -205,7 +256,7 @@ function playPad(i){
 // ---- SEQUENCE ----
 function playSequence(){
   let t=audioCtx.currentTime;
-  const cutoff=parseFloat(cutoffInput.value);
+  const gap=parseFloat(gapInput.value)/1000;
 
   pads.forEach(p=>{
     if(!p.buffer) return;
@@ -214,26 +265,20 @@ function playSequence(){
     src.playbackRate.value=p.rate;
     src.connect(audioCtx.destination);
 
-    const dur=cutoff>0
-      ? Math.min(cutoff/1000, p.buffer.duration/p.rate)
-      : p.buffer.duration/p.rate;
-
+    const dur=getPadDuration(p);
     src.start(t);
     src.stop(t+dur);
-    t+=dur+GAP;
+    t+=dur+gap;
   });
 }
 
-// ---- DURATION ----
+// ---- TOTAL TIME ----
 function updateSequenceDuration(){
-  const cutoff=parseFloat(cutoffInput.value);
+  const gap=parseFloat(gapInput.value)/1000;
   let total=0;
   pads.forEach(p=>{
     if(!p.buffer) return;
-    const dur=cutoff>0
-      ? Math.min(cutoff/1000, p.buffer.duration/p.rate)
-      : p.buffer.duration/p.rate;
-    total+=dur+GAP;
+    total+=getPadDuration(p)+gap;
   });
   playBtn.textContent=`Play All (${total.toFixed(2)}s)`;
 }
@@ -256,6 +301,7 @@ async function countdownAndPlay(){
 
 playBtn.onclick=countdownAndPlay;
 cutoffInput.oninput=updateSequenceDuration;
+gapInput.oninput=updateSequenceDuration;
 
 // ---- INIT ----
 for(let i=0;i<16;i++) createPad(i);
