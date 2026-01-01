@@ -141,22 +141,36 @@ function createPad(i){
 
 // ---- LONG PRESS HANDLER ----
 function addLongPressListener(pad, index){
-  let timer=null;
-  const start=(e)=>{
+  let timer = null;
+
+  const start = (e) => {
     e.preventDefault();
-    timer=setTimeout(()=>{ openFileBrowser(index); timer=null; },600);
+    timer = setTimeout(() => {
+      // Vibrate for 50ms to indicate long press
+      if (navigator.vibrate) navigator.vibrate(50);
+
+      openFileBrowser(index);
+      timer = null;
+    }, 600); // 600ms long press
   };
-  const end=(e)=>{
+
+  const end = (e) => {
     e.preventDefault();
-    if(timer){ clearTimeout(timer); timer=null; playPad(index); }
+    if (timer) {
+      clearTimeout(timer);
+      timer = null;
+      playPad(index); // Short press
+    }
   };
-  pad.el.addEventListener("mousedown",start);
-  pad.el.addEventListener("touchstart",start);
-  pad.el.addEventListener("mouseup",end);
-  pad.el.addEventListener("mouseleave",end);
-  pad.el.addEventListener("touchend",end);
-  pad.el.addEventListener("touchcancel",end);
+
+  pad.el.addEventListener("mousedown", start);
+  pad.el.addEventListener("touchstart", start);
+  pad.el.addEventListener("mouseup", end);
+  pad.el.addEventListener("mouseleave", end);
+  pad.el.addEventListener("touchend", end);
+  pad.el.addEventListener("touchcancel", end);
 }
+
 
 // ---- OPEN FILE BROWSER ----
 function openFileBrowser(index){
