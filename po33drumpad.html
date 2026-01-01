@@ -190,10 +190,24 @@ function cycleRate(i){
 
 // ---- PAD LABEL ----
 function updatePadLabel(i){
-  const p=pads[i];
-  p.rateEl.textContent=p.rate+"x";
-  p.el.childNodes[1]?.remove; // clear old name
-  p.el.append(`${p.name}${p.buffer? "\n"+p.duration.toFixed(2)+"s":""}`);
+  const p = pads[i];
+
+  // Update rate badge
+  p.rateEl.textContent = p.rate + "x";
+
+  // Remove all text nodes except the rate element
+  [...p.el.childNodes].forEach(node => {
+    if (node !== p.rateEl) node.remove();
+  });
+
+  // Build label text
+  let label = p.name;
+  if (p.buffer) {
+    label += "\n" + p.duration.toFixed(2) + "s";
+  }
+
+  // Insert text below rate badge
+  p.el.append(document.createTextNode(label));
 }
 
 // ---- LOAD SAMPLE ----
@@ -300,3 +314,4 @@ updateSequenceDuration();
 
 </body>
 </html>
+
