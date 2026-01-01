@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>PO-33 Drum Pad</title>
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/ryanoasis/nerd-fonts@master/patched-fonts/3270/Regular/3270-Regular.css">
+
+<style>
+* { box-sizing: border-box; font-family: "3270 Nerd Font", monospace; }
+body {
+  background:#0d0d0d; color:#e0e0e0;
+  display:flex; flex-direction:column; align-items:center;
+  padding:20px;
+}
+h1 { font-size:50px; margin-bottom:12px; }
+
+.buttons {
+  display:flex; flex-wrap:wrap; gap:6px; justify-content:center;
+  margin-bottom:14px;
+}
+button {
+  background:#111; color:#e0e0e0;
+  border:1px solid #444;
+  padding:8px 14px;
+  font-size:22px; font-weight:bold;
+  cursor:pointer;
+}
+button.selected { background:#fff; color:#000; }
+
+.grid {
+  display:grid;
+  grid-template-columns:repeat(4,200px);
+  gap:10px;
+  margin-bottom:16px;
+}
+
+.pad {
+  width:200px; height:200px;
+  background:#111;
+  border:1px dashed #444;
+  position:relative;
+  display:flex; align-items:center; justify-content:center;
+  text-align:center;
+  cursor:pointer;
+  white-space:pre-line;
+  font-size:22px;
+}
+.pad.loaded { background:#181818; border-style:solid; }
+.pad.playing { background:#00ff66; color:#000; }
+
+.rate {
+  position:absolute;
+  top:6px; left:6px;
+  font-size:16px;
+  opacity:0.8;
+}
+
+.controls {
+  display:flex;
+  gap:12px;
+  align-items:center;
+}
+
+input {
+  background:#111;
+  color:#fff;
+  border:1px solid #444;
+  font-size:22px;
+  padding:4px 8px;
+  width:100px;
+  text-align:center;
+}
+</style>
+</head>
+<body>
+
+<h1>PO-33 DRUM PAD</h1>
+
+<div class="buttons" id="genreButtons"></div>
+
+<div class="grid" id="grid"></div>
+
+<div class="controls">
+  <button id="playSequence">Play All</button>
+  <label>
+    Cutoff (ms)
+    <input id="cutoffInput" type="number" value="0" min="0">
+  </label>
+</div>
+
+<script>
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+const grid = document.getElementById("grid");
+const playBtn = document.getElementById("playSequence");
+const cutoffInput = document.getElementById("cutoffInput");
+const genreButtonsDiv = document.getElementById("genreButtons");
+
+const GAP = 0.05; // 50ms gap
+const rates = [1,2,3,4];
+const pads = [];
+
+// ---- GENRE LAYOUTS ----
+const layouts = {
+  dnb:["Crash","Ride","Open Hat","FX","Closed Hat","Clap","Snare","Rim","Kick","Kick Alt","Tom Low","Tom Mid","Tom High","Perc","Perc Alt","FX"],
+  techno:["Crash","Ride","Open Hat","Noise","Closed Hat","Clap","Snare","Rim","Kick","Kick Sub","Kick Dist","Tom","Perc","Metal","FX","FX"],
+  lofi:["Vinyl","Texture","Open Hat","FX","Soft Hat","Clap","Snare","Rim","Soft Kick","Low Kick","Tom","Tom","Perc","Shaker","Chord","Vocal"],
+  jungle:["Crash","Ride","Open Hat","FX","Closed Hat","Snare","Ghost","Rim","Kick","Kick Alt","Tom Low","Tom Mid","Tom High","Amen","Perc","FX"],
+  ambient:["Pad1","Pad2","Pad3","FX","Soft Hat","Bell","Snare","Rim","Kick","Kick Low","Tom","Tom","Texture","Texture","FX","FX"],
+  trap:["Crash","Ride","Open Hat","FX","Closed Hat","Clap","Snare","Rim","808","Kick Alt","Tom","Tom","Hi Tom","Perc","FX","Vocal"],
+  breakbeat:["Crash","Ride","Open Hat","FX","Closed Hat","Clap","Snare","Alt Sn","Kick","Kick Alt","Tom","Tom","Hi Tom","Perc","FX","FX"],
+  hiphop:["Crash","Ride","Open Hat","FX","Closed Hat","Clap","Snare","Rim","Kick","Low Kick","Tom","Tom","Perc","Perc2","FX","Vocal"],
+  house:["Crash","Ride","Open Hat","FX","Closed Hat","Clap","Snare","Rim","Kick","Sub","Alt Kick","Tom","Perc","Hi Tom","FX","FX"]
+};
+
+// ---- CREATE PADS ----
+function createPad(i){
+  const el=document.createElement("div");
+  el.className="pad";
+  const rateEl=document.createElement("div");
+  rateEl.className="rate";
+  el.appendChild(rateEl);
+  grid.appendChild(el);
+
+  pads[i]={ buffer:null, duration:0, rate:1, el, rateEl, name:"" };
+
+  el.onclick=()=>playPad(i);
+  el.oncontextmenu=e=>{
+    e.preventDefault();
+    cycleRate(i);
+  };
+  el.ondragover=e=>e.preventDefault();
+  el.ondrop=e=>{
+    e.preventDefault();
+    loadSample(e.dataTransfer.files[0],i);
+  };
+}
+
+// ---- GENRE BUTTONS ----
+Object.keys(layouts).forEach(g=>{
+  const b=document.createElement("button");
+  b.textContent=g.toUpperCase();
+  b.onclick=()=>setLayout(g);
+  genreButtonsDiv.appendChild(b);
+});
+
+function setLayout(g){
+  document.querySelectorAll(".buttons button").forEach(b=>b.classList.remove("selected"));
+  [...genreButtonsDiv.children].find(b=>b.textContent===g.toUpperCase()).classList.add("selected");
+
+  layouts[g].forEach((n,i)=>{
+    pads[i].name=n;
+    updatePadLabel(i);
+  });
+}
+
+// ---- PAD LABEL ----
+function updatePadLabel(i){
+  const p=pads[i];
+  p.rateEl.textContent=p.rate+"x";
+  p.el.lastChild?.remove;
+  p.el.childNodes[1]?.remove;
+  p.el.append(`${p.name}${p.buffer ? "\n"+p.duration.toFixed(2)+"s" : ""}`);
+}
+
+// ---- LOAD SAMPLE ----
+async function loadSample(file,i){
+  const data=await file.arrayBuffer();
+  const buffer=await audioCtx.decodeAudioData(data);
+  const p=pads[i];
+  p.buffer=buffer;
+  p.duration=buffer.duration;
+  p.el.classList.add("loaded");
+  updatePadLabel(i);
+  updateSequenceDuration();
+}
+
+// ---- RATE CYCLE ----
+function cycleRate(i){
+  const p=pads[i];
+  p.rate=rates[(rates.indexOf(p.rate)+1)%rates.length];
+  updatePadLabel(i);
+  updateSequenceDuration();
+}
+
+// ---- PLAY PAD ----
+function playPad(i){
+  const p=pads[i];
+  if(!p.buffer) return;
+  const src=audioCtx.createBufferSource();
+  src.buffer=p.buffer;
+  src.playbackRate.value=p.rate;
+  src.connect(audioCtx.destination);
+
+  const cutoff=parseFloat(cutoffInput.value);
+  const dur=cutoff>0 ? Math.min(cutoff/1000, p.buffer.duration/p.rate) : p.buffer.duration/p.rate;
+
+  src.start();
+  src.stop(audioCtx.currentTime+dur);
+
+  p.el.classList.add("playing");
+  setTimeout(()=>p.el.classList.remove("playing"),100);
+}
+
+// ---- SEQUENCE ----
+function playSequence(){
+  let t=audioCtx.currentTime;
+  const cutoff=parseFloat(cutoffInput.value);
+
+  pads.forEach(p=>{
+    if(!p.buffer) return;
+    const src=audioCtx.createBufferSource();
+    src.buffer=p.buffer;
+    src.playbackRate.value=p.rate;
+    src.connect(audioCtx.destination);
+
+    const dur=cutoff>0
+      ? Math.min(cutoff/1000, p.buffer.duration/p.rate)
+      : p.buffer.duration/p.rate;
+
+    src.start(t);
+    src.stop(t+dur);
+    t+=dur+GAP;
+  });
+}
+
+// ---- DURATION ----
+function updateSequenceDuration(){
+  const cutoff=parseFloat(cutoffInput.value);
+  let total=0;
+  pads.forEach(p=>{
+    if(!p.buffer) return;
+    const dur=cutoff>0
+      ? Math.min(cutoff/1000, p.buffer.duration/p.rate)
+      : p.buffer.duration/p.rate;
+    total+=dur+GAP;
+  });
+  playBtn.textContent=`Play All (${total.toFixed(2)}s)`;
+}
+
+// ---- COUNTDOWN ----
+async function countdownAndPlay(){
+  if(playBtn.disabled) return;
+  playBtn.disabled=true;
+  for(let i=3;i>0;i--){
+    playBtn.textContent=i+"…";
+    await new Promise(r=>setTimeout(r,1000));
+  }
+  playBtn.textContent="PLAYING";
+  playSequence();
+  setTimeout(()=>{
+    playBtn.disabled=false;
+    updateSequenceDuration();
+  },100);
+}
+
+playBtn.onclick=countdownAndPlay;
+cutoffInput.oninput=updateSequenceDuration;
+
+// ---- INIT ----
+for(let i=0;i<16;i++) createPad(i);
+setLayout("dnb");
+updateSequenceDuration();
+</script>
+
+</body>
+</html>
