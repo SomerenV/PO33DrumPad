@@ -56,10 +56,16 @@ button.selected { background:#fff; color:#000; }
   opacity:0.8;
 }
 
+.label {
+  text-align:center;
+  white-space:pre-line;
+}
+
 .controls {
   display:flex;
   gap:12px;
   align-items:center;
+  flex-wrap:wrap;
 }
 
 input {
@@ -119,21 +125,27 @@ const layouts = {
 
 // ---- CREATE PADS ----
 function createPad(i){
-  const el=document.createElement("div");
-  el.className="pad";
-  const rateEl=document.createElement("div");
-  rateEl.className="rate";
+  const el = document.createElement("div");
+  el.className = "pad";
+  
+  const rateEl = document.createElement("div");
+  rateEl.className = "rate";
   el.appendChild(rateEl);
+  
+  const labelEl = document.createElement("div");
+  labelEl.className = "label";
+  el.appendChild(labelEl);
+
   grid.appendChild(el);
 
-  pads[i]={ buffer:null, duration:0, rate:1, el, rateEl, name:"" };
+  pads[i] = { buffer:null, duration:0, rate:1, el, rateEl, labelEl, name:"" };
 
   // Right-click cycles rate
-  el.oncontextmenu=e=>{ e.preventDefault(); cycleRate(i); };
+  el.oncontextmenu = e => { e.preventDefault(); cycleRate(i); };
 
   // Drag/drop
-  el.ondragover=e=>e.preventDefault();
-  el.ondrop=e=>{ e.preventDefault(); loadSample(e.dataTransfer.files[0], i); };
+  el.ondragover = e => e.preventDefault();
+  el.ondrop = e => { e.preventDefault(); loadSample(e.dataTransfer.files[0], i); };
 
   // Long press / long click / long touch for file browser
   addLongPressListener(pads[i], i);
@@ -143,23 +155,22 @@ function createPad(i){
 function addLongPressListener(pad, index){
   let timer = null;
 
-  const start = (e) => {
+  const start = e => {
     e.preventDefault();
     timer = setTimeout(() => {
-      // Vibrate for 50ms to indicate long press
-      if (navigator.vibrate) navigator.vibrate(50);
-
+      // Vibrate 50ms if supported
+      if(navigator.vibrate) navigator.vibrate(50);
       openFileBrowser(index);
       timer = null;
-    }, 600); // 600ms long press
+    }, 600);
   };
 
-  const end = (e) => {
+  const end = e => {
     e.preventDefault();
-    if (timer) {
+    if(timer){
       clearTimeout(timer);
       timer = null;
-      playPad(index); // Short press
+      playPad(index);
     }
   };
 
@@ -171,19 +182,18 @@ function addLongPressListener(pad, index){
   pad.el.addEventListener("touchcancel", end);
 }
 
-
 // ---- OPEN FILE BROWSER ----
 function openFileBrowser(index){
-  const input=document.createElement("input");
-  input.type="file"; input.accept="audio/*";
-  input.onchange=e=>loadSample(e.target.files[0], index);
+  const input = document.createElement("input");
+  input.type = "file"; input.accept = "audio/*";
+  input.onchange = e => loadSample(e.target.files[0], index);
   input.click();
 }
 
 // ---- RATE CYCLE ----
 function cycleRate(i){
-  const p=pads[i];
-  p.rate=rates[(rates.indexOf(p.rate)+1)%rates.length];
+  const p = pads[i];
+  p.rate = rates[(rates.indexOf(p.rate)+1) % rates.length];
   updatePadLabel(i);
   updateSequenceDuration();
 }
@@ -191,32 +201,17 @@ function cycleRate(i){
 // ---- PAD LABEL ----
 function updatePadLabel(i){
   const p = pads[i];
-
-  // Update rate badge
   p.rateEl.textContent = p.rate + "x";
-
-  // Remove all text nodes except the rate element
-  [...p.el.childNodes].forEach(node => {
-    if (node !== p.rateEl) node.remove();
-  });
-
-  // Build label text
-  let label = p.name;
-  if (p.buffer) {
-    label += "\n" + p.duration.toFixed(2) + "s";
-  }
-
-  // Insert text below rate badge
-  p.el.append(document.createTextNode(label));
+  p.labelEl.textContent = p.name + (p.buffer ? "\n" + p.duration.toFixed(2) + "s" : "");
 }
 
 // ---- LOAD SAMPLE ----
 async function loadSample(file,i){
-  const data=await file.arrayBuffer();
-  const buffer=await audioCtx.decodeAudioData(data);
-  const p=pads[i];
-  p.buffer=buffer;
-  p.duration=buffer.duration;
+  const data = await file.arrayBuffer();
+  const buffer = await audioCtx.decodeAudioData(data);
+  const p = pads[i];
+  p.buffer = buffer;
+  p.duration = buffer.duration;
   p.el.classList.add("loaded");
   updatePadLabel(i);
   updateSequenceDuration();
@@ -224,77 +219,77 @@ async function loadSample(file,i){
 
 // ---- PLAY PAD ----
 function playPad(i){
-  const p=pads[i];
+  const p = pads[i];
   if(!p.buffer) return;
-  const src=audioCtx.createBufferSource();
-  src.buffer=p.buffer;
-  src.playbackRate.value=p.rate;
+  const src = audioCtx.createBufferSource();
+  src.buffer = p.buffer;
+  src.playbackRate.value = p.rate;
   src.connect(audioCtx.destination);
 
-  const cutoff=parseFloat(cutoffInput.value);
-  const dur=cutoff>0 ? Math.min(cutoff/1000, p.buffer.duration/p.rate) : p.buffer.duration/p.rate;
+  const cutoff = parseFloat(cutoffInput.value);
+  const dur = cutoff > 0 ? Math.min(cutoff/1000, p.buffer.duration / p.rate) : p.buffer.duration / p.rate;
 
-  src.start(); src.stop(audioCtx.currentTime+dur);
+  src.start(); src.stop(audioCtx.currentTime + dur);
 
   p.el.classList.add("playing");
-  setTimeout(()=>p.el.classList.remove("playing"),100);
+  setTimeout(() => p.el.classList.remove("playing"), 100);
 }
 
 // ---- PLAY SEQUENCE ----
 function playSequence(){
-  let t=audioCtx.currentTime;
-  const cutoff=parseFloat(cutoffInput.value)/1000;
-  const gap=parseFloat(gapInput.value)/1000;
+  let t = audioCtx.currentTime;
+  const cutoff = parseFloat(cutoffInput.value)/1000;
+  const gap = parseFloat(gapInput.value)/1000;
 
-  pads.forEach(p=>{
+  pads.forEach(p => {
     if(!p.buffer) return;
-    const src=audioCtx.createBufferSource();
-    src.buffer=p.buffer;
-    src.playbackRate.value=p.rate;
+    const src = audioCtx.createBufferSource();
+    src.buffer = p.buffer;
+    src.playbackRate.value = p.rate;
     src.connect(audioCtx.destination);
 
-    const dur=cutoff>0 ? Math.min(cutoff, p.buffer.duration/p.rate) : p.buffer.duration/p.rate;
+    const dur = cutoff > 0 ? Math.min(cutoff, p.buffer.duration/p.rate) : p.buffer.duration/p.rate;
 
-    src.start(t); src.stop(t+dur);
-    t+=dur+gap;
+    src.start(t); src.stop(t + dur);
+    t += dur + gap;
   });
 }
 
 // ---- UPDATE DURATION ----
 function updateSequenceDuration(){
-  const cutoff=parseFloat(cutoffInput.value)/1000;
-  const gap=parseFloat(gapInput.value)/1000;
-  let total=0;
-  pads.forEach(p=>{
+  const cutoff = parseFloat(cutoffInput.value)/1000;
+  const gap = parseFloat(gapInput.value)/1000;
+  let total = 0;
+  pads.forEach(p => {
     if(!p.buffer) return;
-    const dur=cutoff>0 ? Math.min(cutoff, p.buffer.duration/p.rate) : p.buffer.duration/p.rate;
-    total+=dur+gap;
+    const dur = cutoff > 0 ? Math.min(cutoff, p.buffer.duration/p.rate) : p.buffer.duration/p.rate;
+    total += dur + gap;
   });
-  playBtn.textContent=`Play All (${total.toFixed(2)}s)`;
+  playBtn.textContent = `Play All (${total.toFixed(2)}s)`;
 }
 
 // ---- COUNTDOWN ----
 async function countdownAndPlay(){
   if(playBtn.disabled) return;
-  playBtn.disabled=true;
+  playBtn.disabled = true;
   for(let i=3;i>0;i--){
-    playBtn.textContent=i+"…";
+    playBtn.textContent = i + "…";
     await new Promise(r=>setTimeout(r,1000));
   }
-  playBtn.textContent="PLAYING";
+  playBtn.textContent = "PLAYING";
   playSequence();
-  setTimeout(()=>{ playBtn.disabled=false; updateSequenceDuration(); },1);
+  setTimeout(() => { playBtn.disabled = false; updateSequenceDuration(); }, 1);
 }
 
-playBtn.onclick=countdownAndPlay;
-cutoffInput.oninput=updateSequenceDuration;
-gapInput.oninput=updateSequenceDuration;
+playBtn.onclick = countdownAndPlay;
+cutoffInput.oninput = updateSequenceDuration;
+gapInput.oninput = updateSequenceDuration;
 
 // ---- GENRE BUTTONS ----
 Object.keys(layouts).forEach(g=>{
-  const b=document.createElement("button");
-  b.textContent=g.toUpperCase();
-  b.onclick=()=>setLayout(g);
+  const b = document.createElement("button");
+  b.textContent = g.toUpperCase();
+  b.onclick = () => setLayout(g);
   genreButtonsDiv.appendChild(b);
 });
 
@@ -302,7 +297,7 @@ Object.keys(layouts).forEach(g=>{
 function setLayout(g){
   document.querySelectorAll(".buttons button").forEach(b=>b.classList.remove("selected"));
   [...genreButtonsDiv.children].find(b=>b.textContent===g.toUpperCase()).classList.add("selected");
-  layouts[g].forEach((n,i)=>{ pads[i].name=n; updatePadLabel(i); });
+  layouts[g].forEach((n,i)=>{ pads[i].name = n; updatePadLabel(i); });
   updateSequenceDuration();
 }
 
@@ -314,4 +309,3 @@ updateSequenceDuration();
 
 </body>
 </html>
-
