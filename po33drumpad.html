@@ -73,6 +73,15 @@ button.selected {
   pointer-events: none;
 }
 
+.pad {
+  touch-action: manipulation;
+}
+
+.pad {
+  touch-action: manipulation;
+  user-select: none;
+}
+
 canvas {
   position:absolute;
   inset:0;
@@ -214,10 +223,11 @@ el.appendChild(numEl);
     cycleRate(i);
   };
 
-  addLongPress(el,i);
-  el.addEventListener("mouseup",()=>playPad(i));
-  
+if ("ontouchstart" in window) {
   addTouchControls(el, i);
+} else {
+  el.addEventListener("mouseup", () => playPad(i));
+}
 
 
 }
@@ -298,6 +308,7 @@ function addTouchControls(el, i){
   let longPressTriggered = false;
 
   el.addEventListener("touchstart", e => {
+    e.preventDefault(); // stops mouse synthesis
     longPressTriggered = false;
 
     longPressTimer = setTimeout(() => {
@@ -305,9 +316,10 @@ function addTouchControls(el, i){
       if (navigator.vibrate) navigator.vibrate(40);
       openFile(i);
     }, 600);
-  }, { passive: true });
+  }, { passive: false });
 
   el.addEventListener("touchend", e => {
+    e.preventDefault();
     clearTimeout(longPressTimer);
 
     if (longPressTriggered) return;
@@ -318,8 +330,9 @@ function addTouchControls(el, i){
       lastTap = 0;
     } else {
       lastTap = now;
+      playPad(i);
     }
-  });
+  }, { passive: false });
 }
 
 
