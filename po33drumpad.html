@@ -218,11 +218,6 @@ el.appendChild(numEl);
     loadSample(e.dataTransfer.files[0],i);
   };
 
-  el.oncontextmenu=e=>{
-    e.preventDefault();
-    cycleRate(i);
-  };
-
 if ("ontouchstart" in window) {
   addTouchControls(el, i);
 } else {
