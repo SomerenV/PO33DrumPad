@@ -217,7 +217,8 @@ el.appendChild(numEl);
   addLongPress(el,i);
   el.addEventListener("mouseup",()=>playPad(i));
   
-  addTouchRateControl(el, i);
+  addTouchControls(el, i);
+
 
 }
 
@@ -291,20 +292,36 @@ function cycleRate(i){
   updateDuration();
 }
 
-function addTouchRateControl(el, i){
-  let touchCount = 0;
+function addTouchControls(el, i){
+  let lastTap = 0;
+  let longPressTimer = null;
+  let longPressTriggered = false;
 
   el.addEventListener("touchstart", e => {
-    touchCount = e.touches.length;
+    longPressTriggered = false;
+
+    longPressTimer = setTimeout(() => {
+      longPressTriggered = true;
+      if (navigator.vibrate) navigator.vibrate(40);
+      openFile(i);
+    }, 600);
   }, { passive: true });
 
   el.addEventListener("touchend", e => {
-    if (touchCount === 2) {
+    clearTimeout(longPressTimer);
+
+    if (longPressTriggered) return;
+
+    const now = Date.now();
+    if (now - lastTap < 300) {
       cycleRate(i);
+      lastTap = 0;
+    } else {
+      lastTap = now;
     }
-    touchCount = 0;
   });
 }
+
 
 
 // ---- PLAY PAD ----
