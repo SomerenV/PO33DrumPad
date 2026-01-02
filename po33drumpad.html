@@ -226,7 +226,7 @@ el.appendChild(numEl);
 if ("ontouchstart" in window) {
   addTouchControls(el, i);
 } else {
-  el.addEventListener("mouseup", () => playPad(i));
+  addMouseControls(el, i);
 }
 
 
@@ -335,7 +335,35 @@ function addTouchControls(el, i){
   }, { passive: false });
 }
 
+function addMouseControls(el, i){
+  let longPressTimer = null;
+  let longPressTriggered = false;
 
+  el.addEventListener("mousedown", e => {
+    if (e.button !== 0) return; // left mouse only
+    longPressTriggered = false;
+
+    longPressTimer = setTimeout(() => {
+      longPressTriggered = true;
+      openFile(i);
+    }, 600);
+  });
+
+  el.addEventListener("mouseup", e => {
+    clearTimeout(longPressTimer);
+    if (longPressTriggered) return;
+    playPad(i);
+  });
+
+  el.addEventListener("mouseleave", () => {
+    clearTimeout(longPressTimer);
+  });
+
+  el.addEventListener("contextmenu", e => {
+    e.preventDefault();
+    cycleRate(i);
+  });
+}
 
 // ---- PLAY PAD ----
 function playPad(i){
